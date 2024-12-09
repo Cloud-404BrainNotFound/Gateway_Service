@@ -25,6 +25,7 @@ app.add_middleware(
 # 服务地址配置
 SERVICES = {
     "user": "http://localhost:8000",  
+    "order": "http://localhost:8008",  
 }
 
 # JWT 验证
@@ -72,3 +73,50 @@ async def get_user(username: str, user = Depends(verify_jwt)):
             headers={"X-User-Id": user["sub"]}
         )
         return response.json()
+
+# 不需要验证的路由
+@app.post("/api/orders/order_stringing", status_code=201)
+async def create_order(request: Request):
+    print("Gateway received create order request")
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            f"{SERVICES['order']}/orders/order_stringing",
+            json=await request.json()
+        )
+        print("Gateway forwarded response")
+        return response.json()
+
+# 需要验证的路由
+@app.get("/api/orders/{order_id}")
+async def get_order(order_id: str, user=Depends(verify_jwt)):
+    print(f"Gateway received get order request for order {order_id}")
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{SERVICES['order']}/orders/{order_id}",
+            headers={"X-User-Id": user["sub"]}
+        )
+        print("Gateway forwarded response")
+        return response.json()
+
+@app.put("/api/orders/{order_id}")
+async def update_order(order_id: str, request: Request, user=Depends(verify_jwt)):
+    print(f"Gateway received update order request for order {order_id}")
+    async with httpx.AsyncClient() as client:
+        response = await client.put(
+            f"{SERVICES['order']}/orders/{order_id}",
+            json=await request.json(),
+            headers={"X-User-Id": user["sub"]}
+        )
+        print("Gateway forwarded response")
+        return response.json()
+
+@app.delete("/api/orders/{order_id}", status_code=204)
+async def delete_order(order_id: str, user=Depends(verify_jwt)):
+    print(f"Gateway received delete order request for order {order_id}")
+    async with httpx.AsyncClient() as client:
+        response = await client.delete(
+            f"{SERVICES['order']}/orders/{order_id}",
+            headers={"X-User-Id": user["sub"]}
+        )
+        print("Gateway forwarded response")
+        return {"message": "Order deleted successfully"}
