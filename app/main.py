@@ -25,7 +25,7 @@ app.add_middleware(
 # 服务地址配置
 SERVICES = {
     "user": "http://localhost:8000",  
-    "order": "http://localhost:8008",  
+    "order": "http://localhost:8008", 
 }
 
 # JWT 验证
@@ -80,7 +80,7 @@ async def create_order(request: Request):
     print("Gateway received create order request")
     async with httpx.AsyncClient() as client:
         response = await client.post(
-            f"{SERVICES['order']}/orders/order_stringing",
+            f"{SERVICES['order']}/order/order_stringing",
             json=await request.json()
         )
         print("Gateway forwarded response")
