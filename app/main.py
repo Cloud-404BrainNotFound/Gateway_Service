@@ -2,6 +2,7 @@ from fastapi import FastAPI, Depends, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 import jwt
+import json
 import os
 from dotenv import load_dotenv
 
@@ -25,7 +26,8 @@ app.add_middleware(
 # 服务地址配置
 SERVICES = {
     "user": "http://localhost:8000",  
-    "order": "http://localhost:8008", 
+    "order": "http://localhost:8008",
+    "composite": "http://localhost:7999",
 }
 
 # JWT 验证
@@ -78,21 +80,31 @@ async def get_user(username: str, user = Depends(verify_jwt)):
 @app.post("/api/orders/order_stringing", status_code=201)
 async def create_order(request: Request):
     print("Gateway received create order request")
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            f"{SERVICES['order']}/order/order_stringing",
-            json=await request.json()
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.post(
+                f"{SERVICES['composite']}/orders/order_stringing",
+                json=await request.json()
+            )
+            print("Gateway forwarded response")
+            return response.json()
+    except httpx.ReadTimeout:
+        raise HTTPException(
+            status_code=504,
+            detail="Service timeout - The request took too long to complete"
         )
-        print("Gateway forwarded response")
-        return response.json()
-
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Service unavailable: {str(e)}"
+        )
 # 需要验证的路由
 @app.get("/api/orders/{order_id}")
 async def get_order(order_id: str, user=Depends(verify_jwt)):
     print(f"Gateway received get order request for order {order_id}")
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            f"{SERVICES['order']}/orders/{order_id}",
+            f"{SERVICES['composite']}/orders/{order_id}",
             headers={"X-User-Id": user["sub"]}
         )
         print("Gateway forwarded response")
@@ -103,7 +115,7 @@ async def update_order(order_id: str, request: Request, user=Depends(verify_jwt)
     print(f"Gateway received update order request for order {order_id}")
     async with httpx.AsyncClient() as client:
         response = await client.put(
-            f"{SERVICES['order']}/orders/{order_id}",
+            f"{SERVICES['composite']}/orders/{order_id}",
             json=await request.json(),
             headers={"X-User-Id": user["sub"]}
         )
@@ -115,7 +127,7 @@ async def delete_order(order_id: str, user=Depends(verify_jwt)):
     print(f"Gateway received delete order request for order {order_id}")
     async with httpx.AsyncClient() as client:
         response = await client.delete(
-            f"{SERVICES['order']}/orders/{order_id}",
+            f"{SERVICES['composite']}/orders/{order_id}",
             headers={"X-User-Id": user["sub"]}
         )
         print("Gateway forwarded response")
