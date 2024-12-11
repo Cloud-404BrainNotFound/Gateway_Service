@@ -32,12 +32,14 @@ SERVICES = {
 
 # JWT 验证
 async def verify_jwt(authorization: str = Header(None)):
+    print("Auth header:", authorization)
     if not authorization or not authorization.startswith('Bearer '):
         raise HTTPException(status_code=401, detail="Invalid token")
     
     try:
         token = authorization.split(' ')[1]
         payload = jwt.decode(token, JWT_SECRET_KEY, algorithms=[JWT_ALGORITHM])
+        print("Token payload:", payload)
         return payload
     except jwt.JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
@@ -76,11 +78,25 @@ async def get_user(username: str, user = Depends(verify_jwt)):
         )
         return response.json()
 
+@app.get("/api/users/{user")
+async def get_user(username: str, user = Depends(verify_jwt)):
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            f"{SERVICES['user']}/users/{username}",
+            headers={"X-User-Id": user["sub"]}
+        )
+        return response.json()
+
+
 # 不需要验证的路由
 @app.post("/api/orders/order_stringing", status_code=201)
 async def create_order(request: Request):
     print("Gateway received create order request")
+
     try:
+        request_data = await request.json()
+        request_data["user_id"] = user["sub"] 
+
         async with httpx.AsyncClient(timeout=30.0) as client:
             response = await client.post(
                 f"{SERVICES['composite']}/orders/order_stringing",
@@ -132,3 +148,26 @@ async def delete_order(order_id: str, user=Depends(verify_jwt)):
         )
         print("Gateway forwarded response")
         return {"message": "Order deleted successfully"}
+
+# 
+@app.get("/api/orders/user/{user_id}")
+async def get_user_orders(user_id: str, user = Depends(verify_jwt)):
+    # 验证请求用户是否在查看自己的订单
+    if user["sub"] != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to view these orders")
+        
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            response = await client.get(
+                f"{SERVICES['composite']}/composite/orders/user/{user_id}",  # 注意路径包含 composite 前缀
+                headers={
+                    "X-User-Id": user["sub"],
+                    "X-User-Role": user["role"]
+                }
+            )
+            return response.json()
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Service unavailable: {str(e)}"
+        )
